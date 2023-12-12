@@ -19,3 +19,11 @@ Flags:
   -s, --server string      Artifactory Server Host
   -u, --username string    User name
 ```
+
+### Example: Publishing a patch upgrade
+If current version of the module is 0.0.1. The following command will upgrade it to 0.0.2
+```shell
+jfrog-cli publish -i patch -s <artifactory-url> -u <artifactory-username> -k <artifactory-api-key>
+```
+
+Similarly, minor and major upgrades can be done using the corresponding increment level flag.
