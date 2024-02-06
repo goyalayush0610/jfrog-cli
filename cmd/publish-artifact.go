@@ -38,6 +38,17 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
+		branch, err := getCurrentGitBranch()
+		if err != nil {
+			fmt.Println("Error:", err)
+			return
+		}
+
+		if branch != "master" {
+			fmt.Println("Artifacts cannot be published only from master, please switch to master branch")
+			return
+		}
+
 		artifactoryServerUrl := "https://" + artifactoryServer + "/artifactory"
 
 		repositoryName, err := getModulePath()
@@ -131,6 +142,15 @@ type SearchResult struct {
 	Results []struct {
 		Name string `json:"name"`
 	} `json:"results"`
+}
+
+func getCurrentGitBranch() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 func getCurrentVersion(artifactoryServer string, repositoryName string, username string, apiKey string) (string, error) {
