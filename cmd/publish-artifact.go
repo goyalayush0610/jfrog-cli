@@ -45,7 +45,7 @@ var publishCmd = &cobra.Command{
 		}
 
 		if branch != "master" {
-			fmt.Println("Artifacts cannot be published only from master, please switch to master branch")
+			fmt.Println("Artifacts can be published only from master, please switch to master branch")
 			return
 		}
 
