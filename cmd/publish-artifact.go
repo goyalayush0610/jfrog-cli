@@ -49,6 +49,17 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
+		isSynced, err := isLocalBranchSyncedWithRemote(branch)
+		if err != nil {
+			fmt.Println("Error checking sync status:", err)
+			return
+		}
+
+		if !isSynced {
+			fmt.Println("Your local branch is not in sync with the remote.")
+			return
+		}
+
 		artifactoryServerUrl := "https://" + artifactoryServer + "/artifactory"
 
 		repositoryName, err := getModulePath()
@@ -151,6 +162,29 @@ func getCurrentGitBranch() (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+func isLocalBranchSyncedWithRemote(branch string) (bool, error) {
+	// Fetch latest changes from the remote repository
+	fetchCmd := exec.Command("git", "fetch", "origin", branch)
+	if err := fetchCmd.Run(); err != nil {
+		return false, err
+	}
+
+	// Get the commit hashes of local and remote branches
+	localCmd := exec.Command("git", "rev-parse", "HEAD")
+	localOutput, err := localCmd.Output()
+	if err != nil {
+		return false, err
+	}
+	remoteCmd := exec.Command("git", "rev-parse", fmt.Sprintf("origin/%s", branch))
+	remoteOutput, err := remoteCmd.Output()
+	if err != nil {
+		return false, err
+	}
+
+	// Compare the commit hashes to check if they are the same
+	return strings.TrimSpace(string(localOutput)) == strings.TrimSpace(string(remoteOutput)), nil
 }
 
 func getCurrentVersion(artifactoryServer string, repositoryName string, username string, apiKey string) (string, error) {
