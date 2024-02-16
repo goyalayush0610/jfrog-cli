@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"crypto/sha1"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -17,46 +20,31 @@ var artifactoryServer string
 var incrementLevel string
 var username string
 var apiKey string
+var newVersion string
 
 func init() {
-	rootCmd.AddCommand(publishCmd)
+	rootCmd.AddCommand(getVersionCmd)
+	// Flags for the get version command
+	getVersionCmd.Flags().StringVarP(&artifactoryServer, "server", "s", "", "Artifactory Server Host")
+	getVersionCmd.Flags().StringVarP(&incrementLevel, "increment", "i", "", "Increment level: pre, patch, minor, or major")
+	getVersionCmd.Flags().StringVarP(&username, "username", "u", "", "User name")
+	getVersionCmd.Flags().StringVarP(&apiKey, "apikey", "k", "", "Api Key")
 
+	rootCmd.AddCommand(publishCmd)
 	// Flags for the publish command
 	publishCmd.Flags().StringVarP(&artifactoryServer, "server", "s", "", "Artifactory Server Host")
-	publishCmd.Flags().StringVarP(&incrementLevel, "increment", "i", "", "Increment level: patch, minor, or major")
+	publishCmd.Flags().StringVarP(&newVersion, "version", "v", "", "Version number")
 	publishCmd.Flags().StringVarP(&username, "username", "u", "", "User name")
 	publishCmd.Flags().StringVarP(&apiKey, "apikey", "k", "", "Api Key")
 }
 
-// publishCmd represents the publish command
-var publishCmd = &cobra.Command{
-	Use:   "publish",
-	Short: "Publish an upgraded version of a JFrog artifact",
+// getVersionCmd represents the Get Upgraded Version command
+var getVersionCmd = &cobra.Command{
+	Use:   "get-version",
+	Short: "Get upgraded version of a JFrog artifact",
 	Run: func(cmd *cobra.Command, args []string) {
 		if incrementLevel == "" || artifactoryServer == "" || username == "" || apiKey == "" {
 			fmt.Println("Please provide increment level (patch, minor, or major), artifactory server, username and api key")
-			return
-		}
-
-		branch, err := getCurrentGitBranch()
-		if err != nil {
-			fmt.Println("Error:", err)
-			return
-		}
-
-		if branch != "master" {
-			fmt.Println("Artifacts can be published only from master, please switch to master branch")
-			return
-		}
-
-		isSynced, err := isLocalBranchSyncedWithRemote(branch)
-		if err != nil {
-			fmt.Println("Error checking sync status:", err)
-			return
-		}
-
-		if !isSynced {
-			fmt.Println("Your local branch is not in sync with the remote.")
 			return
 		}
 
@@ -75,22 +63,24 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Println("Current Version: ", currentVersion)
-
 		// Increment version based on the provided level
 		newVersion := incrementVersion(currentVersion, incrementLevel)
 
-		var option string
-		fmt.Printf("Publishing version %s, please confirm (y/n): ", newVersion)
-		fmt.Scanln(&option)
+		fmt.Printf(newVersion)
+	},
+}
 
-		if option != "y" {
-			fmt.Println("Aborting!")
+var publishCmd = &cobra.Command{
+	Use:   "publish",
+	Short: "Publish an upgraded version of a JFrog artifact",
+	Run: func(cmd *cobra.Command, args []string) {
+		if newVersion == "" || artifactoryServer == "" || username == "" || apiKey == "" {
+			fmt.Println("Please provide increment level (patch, minor, or major), artifactory server, username and api key")
 			return
 		}
 
 		// Publish the upgraded version
-		err = publishNewVersion(artifactoryServer, newVersion, username, apiKey)
+		err := publishNewVersion(artifactoryServer, newVersion, username, apiKey)
 		if err != nil {
 			fmt.Println("Error publishing new version:", err)
 			return
@@ -107,6 +97,10 @@ func incrementVersion(currentVersion, incrementLevel string) string {
 	}
 
 	switch incrementLevel {
+	case "pre":
+		patch := parts[2]
+		newPre := getPreReleaseVersion(patch)
+		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], newPre)
 	case "patch":
 		patch := parts[2]
 		newPatch := fmt.Sprintf("%d", parseVersionNumber(patch)+1)
@@ -117,6 +111,9 @@ func incrementVersion(currentVersion, incrementLevel string) string {
 		return fmt.Sprintf("%s.%s.0", parts[0], newMinor)
 	case "major":
 		major := parts[0]
+		if strings.HasPrefix(major, "v") {
+			major = major[1:]
+		}
 		newMajor := fmt.Sprintf("%d", parseVersionNumber(major)+1)
 		return fmt.Sprintf("%s.0.0", newMajor)
 	default:
@@ -124,9 +121,25 @@ func incrementVersion(currentVersion, incrementLevel string) string {
 	}
 }
 
+func getPreReleaseVersion(patch string) string {
+	parts := strings.Split(patch, "-")
+
+	// Get current time in UTC
+	currentTime := time.Now().Format("20060102150405")
+
+	commitHash := getCommitHash()
+
+	// Generate pre-release version
+	preReleaseVersion := fmt.Sprintf("%s-%s-%s", parts[0], currentTime, commitHash[:7])
+
+	return preReleaseVersion
+}
+
 func parseVersionNumber(versionPart string) int {
+	parts := strings.Split(versionPart, "-")
+
 	num := 0
-	fmt.Sscanf(versionPart, "%d", &num)
+	fmt.Sscanf(parts[0], "%d", &num)
 	return num
 }
 
@@ -250,4 +263,19 @@ func getModulePath() (string, error) {
 
 	currentModule := strings.TrimSpace(string(output))
 	return currentModule, nil
+}
+
+func getCommitHash() string {
+	// Use Git command to get the latest commit hash
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println("Error getting commit hash:", err)
+		os.Exit(1)
+	}
+
+	// Compute SHA-1 hash of the commit hash
+	hash := sha1.New()
+	hash.Write(output)
+	return hex.EncodeToString(hash.Sum(nil))
 }
