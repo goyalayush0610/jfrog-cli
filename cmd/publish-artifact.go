@@ -26,7 +26,7 @@ func init() {
 	rootCmd.AddCommand(getVersionCmd)
 	// Flags for the get version command
 	getVersionCmd.Flags().StringVarP(&artifactoryServer, "server", "s", "", "Artifactory Server Host")
-	getVersionCmd.Flags().StringVarP(&incrementLevel, "increment", "i", "", "Increment level: pre, patch, minor, or major")
+	getVersionCmd.Flags().StringVarP(&incrementLevel, "increment", "i", "", "Increment level: release, pre, patch, minor, or major")
 	getVersionCmd.Flags().StringVarP(&username, "username", "u", "", "User name")
 	getVersionCmd.Flags().StringVarP(&apiKey, "apikey", "k", "", "Api Key")
 
@@ -44,7 +44,12 @@ var getVersionCmd = &cobra.Command{
 	Short: "Get upgraded version of a JFrog artifact",
 	Run: func(cmd *cobra.Command, args []string) {
 		if incrementLevel == "" || artifactoryServer == "" || username == "" || apiKey == "" {
-			fmt.Println("Please provide increment level (patch, minor, or major), artifactory server, username and api key")
+			fmt.Println("Please provide increment level (release, pre, patch, minor, or major), artifactory server, username and api key")
+			os.Exit(1)
+		}
+
+		if incrementLevel == "release" {
+			fmt.Println("v0.0.1")
 			return
 		}
 
@@ -53,18 +58,22 @@ var getVersionCmd = &cobra.Command{
 		repositoryName, err := getModulePath()
 		if err != nil {
 			fmt.Println("Error fetching module path", err)
-			return
+			os.Exit(1)
 		}
 
 		// Retrieve the current version
 		currentVersion, err := getCurrentVersion(artifactoryServerUrl, repositoryName, username, apiKey)
 		if err != nil {
 			fmt.Println("Error fetching current version:", err)
-			return
+			os.Exit(1)
 		}
 
 		// Increment version based on the provided level
-		newVersion := incrementVersion(currentVersion, incrementLevel)
+		newVersion, err := incrementVersion(currentVersion, incrementLevel)
+		if err != nil {
+			fmt.Println("Error incrementing version:", err)
+			os.Exit(1)
+		}
 
 		fmt.Printf(newVersion)
 	},
@@ -76,63 +85,69 @@ var publishCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if newVersion == "" || artifactoryServer == "" || username == "" || apiKey == "" {
 			fmt.Println("Please provide increment level (patch, minor, or major), artifactory server, username and api key")
-			return
+			os.Exit(1)
 		}
 
 		// Publish the upgraded version
 		err := publishNewVersion(artifactoryServer, newVersion, username, apiKey)
 		if err != nil {
 			fmt.Println("Error publishing new version:", err)
-			return
+			os.Exit(1)
 		}
 
 		fmt.Println("Published upgraded version:", newVersion)
 	},
 }
 
-func incrementVersion(currentVersion, incrementLevel string) string {
+func incrementVersion(currentVersion, incrementLevel string) (string, error) {
 	parts := strings.Split(currentVersion, ".")
 	if len(parts) != 3 {
-		return currentVersion // Return the same version if not in semver format (major.minor.patch)
+		return "", fmt.Errorf("invalid current version format: %s", currentVersion) // Return the same version if not in semver format (major.minor.patch)
 	}
 
 	switch incrementLevel {
 	case "pre":
 		patch := parts[2]
-		newPre := getPreReleaseVersion(patch)
-		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], newPre)
+		newPre, err := getPreReleaseVersion(patch)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], newPre), nil
 	case "patch":
 		patch := parts[2]
 		newPatch := fmt.Sprintf("%d", parseVersionNumber(patch)+1)
-		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], newPatch)
+		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], newPatch), nil
 	case "minor":
 		minor := parts[1]
 		newMinor := fmt.Sprintf("%d", parseVersionNumber(minor)+1)
-		return fmt.Sprintf("%s.%s.0", parts[0], newMinor)
+		return fmt.Sprintf("%s.%s.0", parts[0], newMinor), nil
 	case "major":
 		major := parts[0]
 		if strings.HasPrefix(major, "v") {
 			major = major[1:]
 		}
 		newMajor := fmt.Sprintf("%d", parseVersionNumber(major)+1)
-		return fmt.Sprintf("%s.0.0", newMajor)
+		return fmt.Sprintf("v%s.0.0", newMajor), nil
 	default:
-		return currentVersion
+		return "", fmt.Errorf("invalid increment level: %s", incrementLevel)
 	}
 }
 
-func getPreReleaseVersion(patch string) string {
+func getPreReleaseVersion(patch string) (string, error) {
 	parts := strings.Split(patch, "-")
 
 	// Get current time in UTC
 	currentTime := time.Now().Format("20060102150405")
 
-	commitHash := getCommitHash()
+	commitHash, err := getCommitHash()
+	if err != nil {
+		return "", err
+	}
 
 	// Generate pre-release version
 	preReleaseVersion := fmt.Sprintf("%s-%s-%s", parts[0], currentTime, commitHash[:7])
 
-	return preReleaseVersion
+	return preReleaseVersion, nil
 }
 
 func parseVersionNumber(versionPart string) int {
@@ -265,17 +280,16 @@ func getModulePath() (string, error) {
 	return currentModule, nil
 }
 
-func getCommitHash() string {
+func getCommitHash() (string, error) {
 	// Use Git command to get the latest commit hash
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
-		fmt.Println("Error getting commit hash:", err)
-		os.Exit(1)
+		return "", fmt.Errorf("error getting commit hash: %s", err.Error())
 	}
 
 	// Compute SHA-1 hash of the commit hash
 	hash := sha1.New()
 	hash.Write(output)
-	return hex.EncodeToString(hash.Sum(nil))
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }

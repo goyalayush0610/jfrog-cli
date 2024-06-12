@@ -14,8 +14,8 @@
     
     Flags:
       -k, --apikey string      Api Key
-      -h, --help               help for publish
-      -i, --increment string   Increment level: patch, minor, or major
+      -h, --help               help for get-version
+      -i, --increment string   Increment level: release, pre, patch, minor, or major
       -s, --server string      Artifactory Server Host
       -u, --username string    User name
     ```
@@ -43,5 +43,5 @@ Similarly, minor and major upgrade versions can be fetched using the correspondi
 
 ### Example: Publishing new version
 ```shell
-jfrog-cli get-version -v <new-version> -s <artifactory-url> -u <artifactory-username> -k <artifactory-api-key>
+jfrog-cli publish -v <new-version> -s <artifactory-url> -u <artifactory-username> -k <artifactory-api-key>
 ```
