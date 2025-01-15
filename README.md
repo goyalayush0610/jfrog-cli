@@ -15,7 +15,7 @@ Usage:
 Flags:
   -k, --apikey string      Api Key
   -h, --help               help for publish
-  -i, --increment string   Increment level: patch, minor, or major
+  -i, --increment string   Increment level: pre, patch, minor, or major
   -s, --server string      Artifactory Server Host
   -u, --username string    User name
 ```

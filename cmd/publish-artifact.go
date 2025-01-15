@@ -23,7 +23,7 @@ func init() {
 
 	// Flags for the publish command
 	publishCmd.Flags().StringVarP(&artifactoryServer, "server", "s", "", "Artifactory Server Host")
-	publishCmd.Flags().StringVarP(&incrementLevel, "increment", "i", "", "Increment level: patch, minor, or major")
+	publishCmd.Flags().StringVarP(&incrementLevel, "increment", "i", "", "Increment level: pre, patch, minor, or major")
 	publishCmd.Flags().StringVarP(&username, "username", "u", "", "User name")
 	publishCmd.Flags().StringVarP(&apiKey, "apikey", "k", "", "Api Key")
 }
@@ -44,9 +44,11 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
-		if branch != "master" {
-			fmt.Println("Artifacts can be published only from master, please switch to master branch")
-			return
+		if incrementLevel != "pre" {
+			if branch != "master" {
+				fmt.Println("Artifacts can be published only from master, please switch to master branch")
+				return
+			}
 		}
 
 		isSynced, err := isLocalBranchSyncedWithRemote(branch)
@@ -78,7 +80,11 @@ var publishCmd = &cobra.Command{
 		fmt.Println("Current Version: ", currentVersion)
 
 		// Increment version based on the provided level
-		newVersion := incrementVersion(currentVersion, incrementLevel)
+		newVersion, err := incrementVersion(currentVersion, incrementLevel)
+		if err != nil {
+			fmt.Println("Error incrementing version:", err)
+			return
+		}
 
 		var option string
 		fmt.Printf("Publishing version %s, please confirm (y/n): ", newVersion)
@@ -100,28 +106,39 @@ var publishCmd = &cobra.Command{
 	},
 }
 
-func incrementVersion(currentVersion, incrementLevel string) string {
+func incrementVersion(currentVersion, incrementLevel string) (string, error) {
 	parts := strings.Split(currentVersion, ".")
 	if len(parts) != 3 {
-		return currentVersion // Return the same version if not in semver format (major.minor.patch)
+		return "", fmt.Errorf("invalid current version") // Return the same version if not in semver format (major.minor.patch)
 	}
 
 	switch incrementLevel {
+	case "pre":
+		patch := parts[2]
+		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], incrementPre(patch)), nil
 	case "patch":
 		patch := parts[2]
 		newPatch := fmt.Sprintf("%d", parseVersionNumber(patch)+1)
-		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], newPatch)
+		return fmt.Sprintf("%s.%s.%s", parts[0], parts[1], newPatch), nil
 	case "minor":
 		minor := parts[1]
 		newMinor := fmt.Sprintf("%d", parseVersionNumber(minor)+1)
-		return fmt.Sprintf("%s.%s.0", parts[0], newMinor)
+		return fmt.Sprintf("%s.%s.0", parts[0], newMinor), nil
 	case "major":
 		major := parts[0]
-		newMajor := fmt.Sprintf("%d", parseVersionNumber(major)+1)
-		return fmt.Sprintf("%s.0.0", newMajor)
+		newMajor := fmt.Sprintf("%d", parseVersionNumber(major[1:])+1)
+		return fmt.Sprintf("v%s.0.0", newMajor), nil
 	default:
-		return currentVersion
+		return "", fmt.Errorf("invalid increment level")
 	}
+}
+
+func incrementPre(patch string) string {
+	arr := strings.Split(patch, "-")
+	if len(arr) == 3 {
+		return arr[0] + "-" + arr[1] + "-" + fmt.Sprintf("%d", parseVersionNumber(arr[2])+1)
+	}
+	return patch + "-pre-1"
 }
 
 func parseVersionNumber(versionPart string) int {
