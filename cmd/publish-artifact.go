@@ -278,10 +278,17 @@ func getModulePath() (string, error) {
 }
 
 func createAndPushGitTag(tagName string) error {
-	cmd := exec.Command("git", "tag", tagName)
+	fmt.Printf("Enter a description for tag %s: ", tagName)
+	var description string
+	_, err := fmt.Scanln(&description)
+	if err != nil {
+		return fmt.Errorf("failed to read description: %w", err)
+	}
+
+	cmd := exec.Command("git", "tag", "-a", tagName, "-m", description)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		return fmt.Errorf("couldn't create git tag: %w", err)
 	}
@@ -294,5 +301,7 @@ func createAndPushGitTag(tagName string) error {
 		return fmt.Errorf("couldn't push git tag: %w", err)
 	}
 
+	fmt.Println("Tag created and pushed:", tagName)
 	return nil
 }
+
