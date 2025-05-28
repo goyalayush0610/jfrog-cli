@@ -102,6 +102,14 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
+		if incrementLevel != "pre" {
+			err = createAndPushGitTag(newVersion)
+			if err != nil {
+				fmt.Println("Error tagging release:", err)
+				return
+			}
+		}
+
 		fmt.Println("Published upgraded version:", newVersion)
 	},
 }
@@ -267,4 +275,24 @@ func getModulePath() (string, error) {
 
 	currentModule := strings.TrimSpace(string(output))
 	return currentModule, nil
+}
+
+func createAndPushGitTag(tagName string) error {
+	cmd := exec.Command("git", "tag", tagName)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("couldn't create git tag: %w", err)
+	}
+
+	pushCmd := exec.Command("git", "push", "origin", tagName)
+	pushCmd.Stdout = os.Stdout
+	pushCmd.Stderr = os.Stderr
+	err = pushCmd.Run()
+	if err != nil {
+		return fmt.Errorf("couldn't push git tag: %w", err)
+	}
+
+	return nil
 }
