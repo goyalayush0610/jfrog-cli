@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -44,12 +45,12 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
-		if incrementLevel != "pre" {
-			if branch != "master" {
-				fmt.Println("Artifacts can be published only from master, please switch to master branch")
-				return
-			}
-		}
+		// if incrementLevel != "pre" {
+		// 	if branch != "master" {
+		// 		fmt.Println("Artifacts can be published only from master, please switch to master branch")
+		// 		return
+		// 	}
+		// }
 
 		isSynced, err := isLocalBranchSyncedWithRemote(branch)
 		if err != nil {
@@ -278,12 +279,13 @@ func getModulePath() (string, error) {
 }
 
 func createAndPushGitTag(tagName string) error {
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("Enter a description for tag %s: ", tagName)
-	var description string
-	_, err := fmt.Scanln(&description)
+	description, err := reader.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("failed to read description: %w", err)
 	}
+	description = strings.TrimSpace(description)
 
 	cmd := exec.Command("git", "tag", "-a", tagName, "-m", description)
 	cmd.Stdout = os.Stdout
@@ -304,4 +306,3 @@ func createAndPushGitTag(tagName string) error {
 	fmt.Println("Tag created and pushed:", tagName)
 	return nil
 }
-
