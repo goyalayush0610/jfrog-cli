@@ -45,12 +45,12 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
-		// if incrementLevel != "pre" {
-		// 	if branch != "master" {
-		// 		fmt.Println("Artifacts can be published only from master, please switch to master branch")
-		// 		return
-		// 	}
-		// }
+		if incrementLevel != "pre" {
+			if branch != "master" {
+				fmt.Println("Artifacts can be published only from master, please switch to master branch")
+				return
+			}
+		}
 
 		isSynced, err := isLocalBranchSyncedWithRemote(branch)
 		if err != nil {
@@ -103,6 +103,8 @@ var publishCmd = &cobra.Command{
 			return
 		}
 
+		fmt.Println("Published upgraded version:", newVersion)
+
 		if incrementLevel != "pre" {
 			err = createAndPushGitTag(newVersion)
 			if err != nil {
@@ -110,8 +112,6 @@ var publishCmd = &cobra.Command{
 				return
 			}
 		}
-
-		fmt.Println("Published upgraded version:", newVersion)
 	},
 }
 
