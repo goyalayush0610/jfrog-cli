@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -103,6 +104,14 @@ var publishCmd = &cobra.Command{
 		}
 
 		fmt.Println("Published upgraded version:", newVersion)
+
+		if incrementLevel != "pre" {
+			err = createAndPushGitTag(newVersion)
+			if err != nil {
+				fmt.Println("Error tagging release:", err)
+				return
+			}
+		}
 	},
 }
 
@@ -267,4 +276,33 @@ func getModulePath() (string, error) {
 
 	currentModule := strings.TrimSpace(string(output))
 	return currentModule, nil
+}
+
+func createAndPushGitTag(tagName string) error {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("Enter a description for tag %s: ", tagName)
+	description, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read description: %w", err)
+	}
+	description = strings.TrimSpace(description)
+
+	cmd := exec.Command("git", "tag", "-a", tagName, "-m", description)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return fmt.Errorf("couldn't create git tag: %w", err)
+	}
+
+	pushCmd := exec.Command("git", "push", "origin", tagName)
+	pushCmd.Stdout = os.Stdout
+	pushCmd.Stderr = os.Stderr
+	err = pushCmd.Run()
+	if err != nil {
+		return fmt.Errorf("couldn't push git tag: %w", err)
+	}
+
+	fmt.Println("Tag created and pushed:", tagName)
+	return nil
 }
