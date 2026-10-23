@@ -97,7 +97,7 @@ var publishCmd = &cobra.Command{
 		}
 
 		// Publish the upgraded version
-		err = publishNewVersion(artifactoryServer, newVersion, username, apiKey)
+		err = publishNewVersion(artifactoryServerUrl, newVersion, username, apiKey)
 		if err != nil {
 			fmt.Println("Error publishing new version:", err)
 			return
@@ -157,7 +157,11 @@ func parseVersionNumber(versionPart string) int {
 }
 
 func publishNewVersion(artifactoryServer string, newVersion string, username string, apiKey string) error {
-	jfrogCommand := fmt.Sprintf("jfrog gp %s --url=%s --user=%s --password=%s", newVersion, artifactoryServer, username, apiKey)
+	serverUrl := artifactoryServer
+	if !strings.HasPrefix(serverUrl, "http://") && !strings.HasPrefix(serverUrl, "https://") {
+		serverUrl = "https://" + serverUrl + "/artifactory"
+	}
+	jfrogCommand := fmt.Sprintf("jfrog gp %s --url=%s --user=%s --password=%s", newVersion, serverUrl, username, apiKey)
 
 	fmt.Println("Publishing Go artifact...")
 	fmt.Println("Running command:", jfrogCommand)
@@ -215,7 +219,7 @@ func isLocalBranchSyncedWithRemote(branch string) (bool, error) {
 
 func getCurrentVersion(artifactoryServer string, repositoryName string, username string, apiKey string) (string, error) {
 	url := fmt.Sprintf("%s/api/search/aql", artifactoryServer)
-	payload := fmt.Sprintf(`items.find({ "repo": {"$eq":"go-local"}, "path": {"$match" : "%s/@v"}}).sort({"$desc":["created"]}).limit(1)`, repositoryName)
+	payload := fmt.Sprintf(`items.find({ "repo": {"$eq":"go-local"}, "path": {"$match" : "%s/@v"}, "name": {"$match": "*.info"}}).sort({"$desc":["created"]}).limit(1)`, repositoryName)
 
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", url, strings.NewReader(payload))
@@ -242,6 +246,10 @@ func getCurrentVersion(artifactoryServer string, repositoryName string, username
 	if err != nil {
 		fmt.Println("Error reading response:", err)
 		return "", err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("artifactory returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse JSON response to get the latest version
